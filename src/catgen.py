@@ -109,15 +109,15 @@ def parseMp4boxMediaInfo(file_name, mp4box_path, regex_mp4box_duration):
 # Locates the mp4box executable and returns a full path to it
 def findMp4Box(path_to_gpac_install=None):
   
-  if(not path_to_gpac_install is None and os.path.isfile(os.path.join(path_to_gpac_install, "mp4box.exe")))
+  if( not path_to_gpac_install is None and os.path.isfile(os.path.join(path_to_gpac_install, "mp4box.exe")) ):
     return os.path.join(path_to_gpac_install, "mp4box.exe")
   
   # Attempts to search for it under C:\Program Files\GPAC
-  if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe"))
+  if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe")):
     return "C:\\Program Files\\GPAC\\mp4box.exe"
   
   # For 32 bit installs
-  if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe"))
+  if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe")):
     return "C:\\Program Files (x86)\\GPAC\\mp4box.exe"
   
   # Throw an error
