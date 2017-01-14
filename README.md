@@ -8,6 +8,8 @@ The script relies on the `mp4box` utility from the [GPAC](https://gpac.wp.mines-
 
 This script solves long outstanding feature requests for the GPAC toolkit such as [#325](https://sourceforge.net/p/gpac/bugs/325/)
 
+Details and discussions can also be found on [my blog](https://blog.sverrirs.com/2017/01/joining-mp4-files-with-chapters.html).
+
 :heart:
 
 ## Requires
