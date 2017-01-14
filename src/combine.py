@@ -27,7 +27,7 @@ import glob # Used to do partial file path matching when listing file directorie
 import subprocess # To execute shell commands 
 import re # To perform substring matching on the output of mp4box and other subprocesses
 from datetime import timedelta # To store the parsed duration of files and calculate the accumulated duration
-
+from random import shuffle # To be able to shuffle the list of files if the user requests it
 #
 # Provides natural string sorting (numbers inside strings are sorted in the correct order)
 # http://stackoverflow.com/a/3033342/779521
@@ -82,8 +82,10 @@ def runMain():
 
   print("Found {0} files".format(len(file_infos)))
 
-  # Now segment the files found and their infos into chunks that fit the size limits
-
+  # If the user wants the list of files shuffled then do that now in place
+  if( args.shuffle ):
+    shuffle(file_infos)
+    print("File list shuffled")
   
   # Now generate the cat operation for each segment
   seg_files = []
@@ -339,6 +341,9 @@ def parseArguments():
                                         type=str)
 
   parser.add_argument("--overwrite",     help="Existing files with the same name as the output will be silently overwritten.", 
+                                        action="store_true")
+
+  parser.add_argument("--shuffle",     help="Shuffles the list of episodes in a random fashion before combining. Useful to generate a random list of episodes to fill a DVD.", 
                                         action="store_true")
   
   parser.add_argument("-d", "--debug",  help="Prints out extra debugging information while script is running", 

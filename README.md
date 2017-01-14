@@ -72,13 +72,20 @@ If the output file exists the script will by default print an error and terminat
 python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8 --overwrite
 ```
 
+## Shuffling the list of files
+By default the files are concatinated in order by their filename. In case you want to randomize their order (e.g. if you're creating a shuffled playlist type of file) you can use the `--shuffle` argument
+
+```
+python combine.py -m "D:\videos\*.mp4" -o "D:\toburn\Shuffle.mp4" --disk dvd4 --shuffle
+```
+
 ## Contributing
 
 I welcome any and all suggestions and fixes either through the issue system above or through pull-requests.
 
 Although this project is small it has a [code of conduct](CODE_OF_CONDUCT.md) that I hope everyone will do their best to follow when contributing to any aspects of this project. Be it discussions, issue reporting, documentation or programming. 
 
-If you don't want to open issues here on Github, send me your feedback by email at [mp4cat@sverrirs.com](mailto:mp4cat@sverrirs.com).
+If you don't want to open issues here on Github, send me your feedback by email at [mp4combine@sverrirs.com](mailto:mp4combine@sverrirs.com).
 
 > _"Be excellent to each other"_
 > :hatched_chick:
