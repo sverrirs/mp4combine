@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "0.2.0"
+__version__ = "1.0.0"
 """
-Constants declaration for the catgen.py script.
+Constants declaration for the combine.py script.
 
+See: https://github.com/sverrirs/mp4combine
+Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
 """
 
 # Most DVD±R/RWs are advertised using the definition of 1 Gigabyte = 1,000,000,000 bytes

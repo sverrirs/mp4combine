@@ -1,4 +1,4 @@
-# Mp4 Video Joiner
+# Mp4 Video Combiner
 
 Python script that assist in concatenating mp4 video files into a single larger file and automatically create named chapter marks at each join making it really easy to skip forward and backwards within the video file.
 
@@ -22,7 +22,7 @@ pip install humanize
 Assuming you have a bunch of videos named "clipXX.mp4" in a folder called _videos_ then this is how you feed all of them into the concatinator and specify an output file
 
 ```
-python catgen.py --match "D:\videos\clip*" -o "D:\videos\all_clips.mp4"
+python combine.py --match "D:\videos\clip*" -o "D:\videos\all_clips.mp4"
 ```
 
 ## Advanced usage
@@ -34,7 +34,7 @@ No worries! :relieved:
 The script can automatically segment the output files according to known DVD and BluRay disk sizes using the `--disk` command line argument
 
 ```
-python catgen.py --match "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8
+python combine.py --match "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8
 ```
 
 This will create multiple output files
@@ -58,7 +58,7 @@ _Neat_ :thumbsup:
 You can also specify a custom file size using the `--size` argument. The example below limits the output file size to 800MB.
 
 ```
-python catgen.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --size 800MB
+python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --size 800MB
 ```
 
 The `--size` argument supports multiple format endings such as 'MB' for megabytes and 'GB' for gigabytes. If nothing is specified then 'MB' is assumed. You can also specify fractional sizes such as '15.5GB'.
@@ -67,7 +67,7 @@ The `--size` argument supports multiple format endings such as 'MB' for megabyte
 If the output file exists the script will by default print an error and terminate without doing anything. To silently overwrite existing files with the same file name you can use the `--overwrite` switch
 
 ```
-python catgen.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8 --overwrite
+python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8 --overwrite
 ```
 
 ## Contributing

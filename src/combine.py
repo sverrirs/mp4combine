@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "0.2.0"
+__version__ = "1.0.0"
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
 together and generates a chapter file that marks the beginning of each concatenated file in the final result.
@@ -13,7 +13,7 @@ The script is written in Python 3.5
 Requires:
   pip install humanize
 
-See: https://github.com/sverrirs/mp4box-catgen
+See: https://github.com/sverrirs/mp4combine
 Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
 """
 from constant import DISKSIZES, ABSSIZES # Constants for the script
