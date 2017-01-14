@@ -30,6 +30,7 @@ python catgen.py --match "D:\videos\clip*" -o "D:\videos\all_clips.mp4"
 Assuming you have a large 16GB list of [Barbie](https://en.wikipedia.org/wiki/Barbie:_Life_in_the_Dreamhouse) Mp4 video files in a folder. Now you'd like to burn them all to a DVD to play on your XBox or Playstation computer. However the list of files is much greater than what can fit on a single DVD disk.
 
 No worries! :relieved:
+
 The script can automatically segment the output files according to known DVD and BluRay disk sizes using the `--disk` command line argument
 
 ```
@@ -48,7 +49,9 @@ Output: D:\toburn\Barbie_003.mp4
 5 chapters, 01:33:07.920 running time, 1.4G total size
 ```
 
-Now you can burn each individual file to a dvd. Neat :thumbsup:
+Now you can burn each individual file to a dvd. 
+
+_Neat_ :thumbsup:
 
 > The disk settings supported are `dvd4` (4.7GB), `dvd8` (8.5GB) and `br25` (25GB).
 
@@ -71,7 +74,7 @@ python catgen.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8 --ov
 
 I welcome any and all suggestions and fixes either through the issue system above or through pull-requests.
 
-> Although this project is small it has a [code of conduct](CODE_OF_CONDUCT.md) that I hope everyone will do their best to follow when contributing to any aspects of this project. Be it discussions, issue reporting, documentation or programming. 
+Although this project is small it has a [code of conduct](CODE_OF_CONDUCT.md) that I hope everyone will do their best to follow when contributing to any aspects of this project. Be it discussions, issue reporting, documentation or programming. 
 
 If you don't want to open issues here on Github, send me your feedback by email at [mp4cat@sverrirs.com](mailto:mp4cat@sverrirs.com).
 
