@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
 together and generates a chapter file that marks the beginning of each concatenated file in the final result.
@@ -16,6 +16,7 @@ Requires:
 See: https://github.com/sverrirs/mp4box-catgen
 Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
 """
+from constant import DISKSIZES, ABSSIZES # Constants for the script
 
 import humanize # Display human readible values for sizes etc
 import sys, os, re
@@ -27,6 +28,14 @@ import subprocess # To execute shell commands
 import re # To perform substring matching on the output of mp4box and other subprocesses
 from datetime import timedelta # To store the parsed duration of files and calculate the accumulated duration
 
+#
+# Provides natural string sorting (numbers inside strings are sorted in the correct order)
+# http://stackoverflow.com/a/3033342/779521
+def natural_key(string_):
+  """See http://www.codinghorror.com/blog/archives/001018.html"""
+  return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
+
+#
 # The main entry point for the script
 def runMain():
   # Compile the regular expressions
@@ -38,47 +47,140 @@ def runMain():
   # Get the mp4box exec
   mp4exec = findMp4Box(args.gpac)
 
-  # Now execute the thing for all the params
-  in_files = getFileNamesFromGrepMatch(args.match)
+  # Detect the maximum file size that should be generated, if <=0 then unlimited
+  max_out_size = determineMaximumOutputfileSize(args.size, args.disk)
+  print( "Max Out Size: {0}".format(humanize.naturalsize(max_out_size, gnu=True)) )
 
+  # Create the output file names both for the video file and the intermediate chapters file
+  path_out_file = Path(args.output)
+  path_chapters_file = path_out_file.with_suffix('.txt') # Just change the file-extension of the output file to TXT
+
+  # If the output files exist then either error or overwrite
+  if( path_out_file.exists() ):
+    if( args.overwrite ):
+      os.remove(str(path_out_file))
+    else:
+      print( "Output file '{0}' already exists. Use --overwrite switch to overwrite.".format(path_out_file.name))
+      sys.exit(0)
+
+  # Get all the input files
+  in_files = getFileNamesFromGrepMatch(args.match, path_out_file)
   if( in_files is None ):
-    print( "No files found matching '{0}'".format(args_match))
+    print( "No mp4 video files found matching '{0}'".format(args.match))
     sys.exit(0)
 
   file_infos = []
-
+  # Only process files that have file-ending .mp4 and not files that have the same name as the joined one
   for in_file in in_files:
     print("File: {0}".format(in_file))
     file_infos.append(parseMp4boxMediaInfo(in_file, mp4exec, regex_mp4box_duration))
 
+  # If nothing was found then don't continue, this can happen if no mp4 files are found or if only the joined file is found
+  if( len(file_infos) <= 0 ):
+    print( "No mp4 video files found matching '{0}'".format(args.match))
+    sys.exit(0)
+
   print("Found {0} files".format(len(file_infos)))
+
+  # Now segment the files found and their infos into chunks that fit the size limits
+
   
-  # Now generate the cat operation
+  # Now generate the cat operation for each segment
+  seg_files = []
   chapters = []
   cumulative_dur = timedelta(seconds=0)
   cumulative_size = 0
+  seg_files_created = 0
   for file_info in file_infos:
+    # When the cumulative_size will become greater than the maximum size then call the creation function and reset the counters for the segment
+    if( max_out_size > 0 and cumulative_size + file_info['size'] > max_out_size ):
+      # Creat the output file
+      seg_files_created += 1
+      createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size, mp4exec, path_out_file, path_chapters_file, args.overwrite, seg_files_created )
+      # Reset the loop variables
+      seg_files = []
+      chapters = []
+      cumulative_dur = timedelta(seconds=0)
+      cumulative_size = 0
+
+    # Collect the file info data and continue to the next file
+    seg_files.append(file_info['file'])
     chapters.append({"name": Path(file_info['file']).stem, "timecode":formatTimedelta(cumulative_dur)})
     cumulative_dur += file_info['dur'] # Count the cumulative duration
-    cumulative_size += file_info['size']
+    cumulative_size += file_info['size']    
+
+  # After the loop, create the final output file
+  if( seg_files_created > 0 ):
+    seg_files_created += 1 # Increment the seg files only if it has already been incremented
+  createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size, mp4exec, path_out_file, path_chapters_file, args.overwrite, seg_files_created )
   
-  # Add the final chapter as the end
+  print("Videos combined sucessfully!")
+
+#
+# Creates a combined video file for a segment
+def createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size, mp4exec, path_out_file, path_chapters_file, args_overwrite, seg_files_created ):
+
+  # If we're creating segmentation files then this variable will contain the current number of the segment
+  # if we're only creating a single file then this value will be zero and only one output file will be generated ever
+  path_out_seg_file = path_out_file
+  if( seg_files_created > 0 ):
+    # Join the seg number with the file name
+    dirpath = os.path.dirname(str(path_out_file))
+    path_out_seg_file = Path(os.path.join(dirpath, "{0}_{1}{2}".format(path_out_file.stem, str(seg_files_created).zfill(3), path_out_file.suffix)))
+
+  # If the output files exist then either error or overwrite
+  if( path_out_seg_file.exists() ):
+    if( args_overwrite ):
+      os.remove(str(path_out_seg_file))
+    else:
+      print( "Output file '{0}' already exists. Use --overwrite switch to overwrite.".format(path_out_seg_file.name))
+      sys.exit(0)
+
+  print( "Output: {0}".format(str(path_out_seg_file)))
+  
+  # Add the final chapter as the end for this segment
   chapters.append({"name": "End", "timecode":formatTimedelta(cumulative_dur)})
 
   # Chapters should be +1 more than files as we have an extra chapter ending at the very end of the file
   print("{0} chapters, {1} running time, {2} total size".format( len(chapters), formatTimedelta(cumulative_dur), humanize.naturalsize(cumulative_size, gnu=True)))
 
-  # Check the output file path variables and construct all files needed
-  path_out_file = Path(args.output)
-  path_chapters_file = path_out_file.with_suffix('.txt') # Just change the file-extension of the output file to TXT
-
-  # Write the chapters file
+  # Write the chapters file to out
   saveChaptersFile(chapters, path_chapters_file)
 
   # Now create the combined file and include the chapter marks
-  saveCombinedVideoFile(mp4exec, in_files, path_out_file, path_chapters_file)
-  
-  print("Videos combined sucessfully!")
+  saveCombinedVideoFile(mp4exec, seg_files, path_out_seg_file, path_chapters_file)
+
+  # Delete the chapters file
+  os.remove(str(path_chapters_file))
+
+#
+# Attempts to detect the requested size of the output file based on the input parameters
+# the absolute_size is overridden by disk_capacity if both are specified
+def determineMaximumOutputfileSize(absolute_size, disk_capacity):
+  if( disk_capacity and disk_capacity in DISKSIZES ):
+    dsk_cap = DISKSIZES[disk_capacity]
+    #print( "Disk Capacity: {0}".format(dsk_cap))
+    return dsk_cap
+  elif( absolute_size):
+    #print( "Absolute size: "+absolute_size)
+    # First remove all spaces from the size string and convert to uppercase, remove all commas from the string
+    # now attempt to parse the sizes
+    abs_size = "".join("".join(absolute_size.split(' ')).split(',')).upper()
+    regex_size_parse = re.compile(r"^(?P<size>[0-9]*(?:\.[0-9]*)?)\s*(?P<unit>GB|MB|KB|B|TB)?$", re.MULTILINE)
+
+    match = regex_size_parse.search( absolute_size )
+    size = float(match.group("size"))
+    unit = match.group("unit")
+    #print( "Absolute value: {0}, unit: {1} ".format(size, unit))
+    if( not unit or not unit in ABSSIZES ):
+      unit = "MB"  # Default is megabytes if nothing is specified
+    unit_multiplier = ABSSIZES[unit]
+    total_size = size * unit_multiplier
+    #print( "Absolute total: {0}, mult: {1} ".format(total_size, unit_multiplier))
+    return total_size
+  else:
+    # If nothing is specified then the default return is to use unbounded
+    return -1
   
 #
 # Executes the mp4box app with the -info switch and 
@@ -125,8 +227,9 @@ def findMp4Box(path_to_gpac_install=None):
 
 #
 # Returns an array of files matching the grep string passed in
-def getFileNamesFromGrepMatch(grep_match):
-  return glob.glob(grep_match.replace("\\", "/"))
+def getFileNamesFromGrepMatch(grep_match, path_out_file):
+   in_files = glob.glob(grep_match.replace("\\", "/"))
+   return [f for f in sorted(in_files, key=natural_key) if '.mp4' in Path(f).suffix and not Path(f) == path_out_file]
 
 #
 # Cleans any invalid file name and file path characters from the given filename
@@ -210,6 +313,7 @@ def saveCombinedVideoFile(mp4box_path, video_files, path_out_file, path_chapters
   sys.stdout.write('\r')
 
   if( retcode != 0 ):
+    print()
     print( "Error while concatinating file")
   return retcode
 
@@ -223,17 +327,23 @@ def parseArguments():
   parser.add_argument("-m","--match",   help="A grep style match that should be used to detect files to concatinate.",
                                         type=str)                                        
 
-  parser.add_argument("-f","--files",   help="The list of files that should be concatinated",
-                                        type=str, nargs="+")
+#  parser.add_argument("-f","--files",   help="The list of files that should be concatinated",
+#                                        type=str, nargs="+")
   
-  parser.add_argument("-s", "--size",   help="Defines the maximum size of a single combined output file. Supports format ending such as 'MB' for megabytes, 'GB' for gigabytes. If nothing is specified then 'MB' is assumed.",
-                                        type=str)
+  parser.add_argument('--disk',          help="When defined this defines the maximum file size to generate so that they will fit the required optical disk capacity. dvd4=4.7GB, dvd8=8.5GB, br25=25GB. If specified this overrides the -s/--size argument.",
+                                        choices=['dvd4', 'dvd8', 'br25'])
+
+  parser.add_argument("-s", "--size",   help="Defines the maximum size of a single combined output file. Supports format ending such as 'MB' for megabytes, 'GB' for gigabytes. If nothing is specified then 'MB' is assumed. Overridden by the --disk argument if both are specified. Supports only numbers using dot (.) as decimal separator, e.g. '15.5GB'", type=str)
 
   parser.add_argument("--gpac",         help="Path to the GPAC install directory", 
-                                        type=str)      
+                                        type=str)
+
+  parser.add_argument("--overwrite",     help="Existing files with the same name as the output will be silently overwritten.", 
+                                        action="store_true")
   
   parser.add_argument("-d", "--debug",  help="Prints out extra debugging information while script is running", 
                                         action="store_true")
+
 
   return parser.parse_args()
 
