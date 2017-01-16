@@ -65,6 +65,8 @@ python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --size 800MB
 
 The `--size` argument supports multiple format endings such as 'MB' for megabytes and 'GB' for gigabytes. If nothing is specified then 'MB' is assumed. You can also specify fractional sizes such as '15.5GB'.
 
+> If you intend to play the files on your Xbox console then you need to limit the file size to be no more than `4GB`. This file limit is imposed by the FAT32 file system (see [Q12](http://support.xbox.com/en-US/xbox-360/console/audio-video-playback-faq#Q11)).
+
 ## Overwriting existing files
 If the output file exists the script will by default print an error and terminate without doing anything. To silently overwrite existing files with the same file name you can use the `--overwrite` switch
 
