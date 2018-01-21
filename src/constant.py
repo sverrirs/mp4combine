@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 """
 Constants declaration for the combine.py script.
 
 See: https://github.com/sverrirs/mp4combine
 Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
 """
+import sys
+from termcolor import colored # For shorthand color printing to the console, https://pypi.python.org/pypi/termcolor
 
 # Most DVD±R/RWs are advertised using the definition of 1 Gigabyte = 1,000,000,000 bytes
 # instead of the more traditional definition of 1 GB = 1,073,741,824 bytes = 1 Gibibyte.
@@ -25,3 +27,16 @@ ABSSIZES['KB'] = ABSSIZES['B'] * 1024
 ABSSIZES['MB'] = ABSSIZES['KB'] * 1024
 ABSSIZES['GB'] = ABSSIZES['MB'] * 1024
 ABSSIZES['TB'] = ABSSIZES['GB'] * 1024
+
+class Colors(object):
+  # Lambdas as shorthands for printing various types of data
+  # See https://pypi.python.org/pypi/termcolor for more info
+  filename = lambda x: colored(x, 'cyan')
+  #color_pid_title = lambda x: colored(x, 'red', 'on_cyan')
+  toolpath = lambda x: colored(x, 'yellow')
+  #color_sid = lambda x: colored(x, 'yellow')
+  #color_description = lambda x: colored(x, 'white')
+  fileout = lambda x: colored(x, 'green')
+  success = lambda x: colored(x, 'green')
+  #color_progress_remaining = lambda x: colored(x, 'white')
+  #color_progress_percent = lambda x: colored(x, 'green')

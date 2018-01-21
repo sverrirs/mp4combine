@@ -1,8 +1,10 @@
 # Mp4 Video Combiner
 
-Python script that assist in concatenating mp4 video files into a single larger file and automatically create named chapter marks at each join making it really easy to skip forward and backwards within the video file.
+Python script that assist in concatenating mp4 video files into a single larger file and automatically create named chapter marks at each join making it really easy to skip forward and backwards within the video file. 
 
-The script relies on the `mp4box` utility from the [GPAC](https://gpac.wp.mines-telecom.fr/downloads/) software bundle You will need to download and install this bundle first before using this tool. 
+All video files created by this tool are fully compatible and play without errors on Xbox 360/One, PS4 and all major video players on desktop or mobile.
+
+The script relies on the `mp4box` utility from the [GPAC](https://gpac.wp.mines-telecom.fr/downloads/) software bundle and the `ffmpeg` utility from [ffmpeg.org](https://www.ffmpeg.org/). The Windows 64bit version of both these tools are included in the bundle.
 
 > Currently this script has only been developed for use on Windows but I welcome any and all pull requests. So if you feel you can improve the OS compatability I'd appreciate your help.
 
@@ -14,20 +16,24 @@ Details and discussions can also be found on [my blog](https://blog.sverrirs.com
 
 ## Requires
 
-Python 3.x
+Python 3.5+
 
 ```
 pip install humanize
+pip install colorama
+pip install termcolor
 ```
 
 ## Simple usage
-Assuming you have a bunch of videos named "clipXX.mp4" in a folder called _videos_ then this is how you feed all of them into the concatinator and specify an output file
+Assuming you have a bunch of videos named "clipXX.mp4" in a folder called _videos_ then this is how you feed all of them into script and have it automagically combine all the files and place nice chapter marks at the seams.
 
 ```
 python combine.py --match "D:\videos\clip*" -o "D:\videos\all_clips.mp4"
 ```
 
 ## Advanced usage
+
+> For all options supported by this tool run `python combine.py -h`
 
 Assuming you have a large 16GB list of [Barbie](https://en.wikipedia.org/wiki/Barbie:_Life_in_the_Dreamhouse) Mp4 video files in a folder. Now you'd like to burn them all to a DVD to play on your XBox or Playstation computer. However the list of files is much greater than what can fit on a single DVD disk.
 
@@ -39,19 +45,15 @@ The script can automatically segment the output files according to known DVD and
 python combine.py --match "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --disk dvd8
 ```
 
-This will create multiple output files
+This will create the original output file and then also split files based on your maximum size
 ```
-Output: D:\toburn\Barbie_001.mp4
-23 chapters, 08:32:15.560 running time, 7.6G total size
-
-Output: D:\toburn\Barbie_002.mp4
-23 chapters, 08:32:04.720 running time, 7.6G total size
-
-Output: D:\toburn\Barbie_003.mp4
-5 chapters, 01:33:07.920 running time, 1.4G total size
+D:\toburn\Barbie.mp4
+D:\toburn\Barbie_001.mp4
+D:\toburn\Barbie_002.mp4
+D:\toburn\Barbie_003.mp4
 ```
 
-Now you can burn each individual file to a dvd. 
+Now you can burn each individual split file to a dvd. 
 
 _Neat_ :thumbsup:
 

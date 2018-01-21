@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
 together and generates a chapter file that marks the beginning of each concatenated file in the final result.
@@ -10,16 +10,22 @@ https://gpac.wp.mines-telecom.fr/downloads/
 
 The script is written in Python 3.5
 
+Details about Xbox video formats:
+https://support.xbox.com/en-IE/xbox-360/console/audio-video-playback-faq
+
 Requires:
   pip install humanize
+  pip install colorama
+  pip install termcolor
 
 See: https://github.com/sverrirs/mp4combine
 Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
 """
-from constant import DISKSIZES, ABSSIZES # Constants for the script
+from colorama import init, deinit # For colorized output to console windows (platform and shell independent)
+from constant import DISKSIZES, ABSSIZES, Colors # Constants for the script
 
 import humanize # Display human readible values for sizes etc
-import sys, os, re
+import sys, os, time
 from pathlib import Path # to check for file existence in the file system
 import argparse # Command-line argument parser
 import ntpath # Used to extract file name from path for all platforms http://stackoverflow.com/a/8384788
@@ -38,107 +44,83 @@ def natural_key(string_):
 #
 # The main entry point for the script
 def runMain():
-  # Compile the regular expressions
-  regex_mp4box_duration = re.compile(r"Computed Duration (?P<hrs>[0-9]{2}):(?P<min>[0-9]{2}):(?P<sec>[0-9]{2}).(?P<msec>[0-9]{3})", re.MULTILINE)
+  try:
+    init() # Initialize the colorama library
 
-  # Construct the argument parser for the commandline
-  args = parseArguments()
+    # Compile the regular expressions
+    regex_mp4box_duration = re.compile(r"Computed Duration (?P<hrs>[0-9]{2}):(?P<min>[0-9]{2}):(?P<sec>[0-9]{2}).(?P<msec>[0-9]{3})", re.MULTILINE)
 
-  # Get the mp4box exec
-  mp4exec = findMp4Box(args.gpac)
+    # Construct the argument parser for the commandline
+    args = parseArguments()
 
-  # Detect the maximum file size that should be generated, if <=0 then unlimited
-  max_out_size = determineMaximumOutputfileSize(args.size, args.disk)
-  print( "Max Out Size: {0}".format(humanize.naturalsize(max_out_size, gnu=True)) )
+    # Get the mp4box exec
+    mp4exec = findMp4Box(args.gpac)
 
-  # Create the output file names both for the video file and the intermediate chapters file
-  path_out_file = Path(args.output)
-  path_chapters_file = path_out_file.with_suffix('.txt') # Just change the file-extension of the output file to TXT
+    # Get ffmpeg exec
+    ffmpegexec = findffmpeg(args.ffmpeg)
 
-  # If the output files exist then either error or overwrite
-  if( path_out_file.exists() ):
-    if( args.overwrite ):
-      os.remove(str(path_out_file))
-    else:
-      print( "Output file '{0}' already exists. Use --overwrite switch to overwrite.".format(path_out_file.name))
+    # Detect the maximum file size that should be generated in kilobytes, if <=0 then unlimited
+    max_out_size_kb = determineMaximumOutputfileSizeInKb(args.size, args.disk)
+
+    # Create the output file names both for the video file and the intermediate chapters file
+    path_out_file = Path(args.output)
+    path_chapters_file = path_out_file.with_suffix('.txt') # Just change the file-extension of the output file to TXT
+
+    # If the output files exist then either error or overwrite
+    if( path_out_file.exists() ):
+      if( args.overwrite ):
+        os.remove(str(path_out_file))
+      else:
+        print( "Output file '{0}' already exists. Use --overwrite switch to overwrite.".format(Colors.filename(path_out_file.name)))
+        sys.exit(0)
+
+    # Get all the input files
+    in_files = getFileNamesFromGrepMatch(args.match, path_out_file)
+    if( in_files is None ):
+      print( "No mp4 video files found matching '{0}'".format(args.match))
       sys.exit(0)
 
-  # Get all the input files
-  in_files = getFileNamesFromGrepMatch(args.match, path_out_file)
-  if( in_files is None ):
-    print( "No mp4 video files found matching '{0}'".format(args.match))
-    sys.exit(0)
+    file_infos = []
+    # Only process files that have file-ending .mp4 and not files that have the same name as the joined one
+    for in_file in in_files:
+      print("File: {0}".format(Colors.filename(in_file)))
+      file_infos.append(parseMp4boxMediaInfo(in_file, mp4exec, regex_mp4box_duration))
 
-  file_infos = []
-  # Only process files that have file-ending .mp4 and not files that have the same name as the joined one
-  for in_file in in_files:
-    print("File: {0}".format(in_file))
-    file_infos.append(parseMp4boxMediaInfo(in_file, mp4exec, regex_mp4box_duration))
+    # If nothing was found then don't continue, this can happen if no mp4 files are found or if only the joined file is found
+    if( len(file_infos) <= 0 ):
+      print( "No mp4 video files found matching '{0}'".format(args.match))
+      sys.exit(0)
 
-  # If nothing was found then don't continue, this can happen if no mp4 files are found or if only the joined file is found
-  if( len(file_infos) <= 0 ):
-    print( "No mp4 video files found matching '{0}'".format(args.match))
-    sys.exit(0)
+    print("Found {0} files".format(len(file_infos)))
 
-  print("Found {0} files".format(len(file_infos)))
+    # If the user wants the list of files shuffled then do that now in place
+    if( args.shuffle ):
+      shuffle(file_infos)
+      print("File list shuffled")
 
-  # If the user wants the list of files shuffled then do that now in place
-  if( args.shuffle ):
-    shuffle(file_infos)
-    print("File list shuffled")
-  
-  # Now generate the cat operation for each segment
-  seg_files = []
-  chapters = []
-  cumulative_dur = timedelta(seconds=0)
-  cumulative_size = 0
-  seg_files_created = 0
-  for file_info in file_infos:
-    # When the cumulative_size will become greater than the maximum size then call the creation function and reset the counters for the segment
-    if( max_out_size > 0 and cumulative_size + file_info['size'] > max_out_size ):
-      # Creat the output file
-      seg_files_created += 1
-      createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size, mp4exec, path_out_file, path_chapters_file, args.overwrite, seg_files_created )
-      # Reset the loop variables
-      seg_files = []
-      chapters = []
-      cumulative_dur = timedelta(seconds=0)
-      cumulative_size = 0
-
-    # Collect the file info data and continue to the next file
-    seg_files.append(file_info['file'])
-    chapters.append({"name": Path(file_info['file']).stem, "timecode":formatTimedelta(cumulative_dur)})
-    cumulative_dur += file_info['dur'] # Count the cumulative duration
-    cumulative_size += file_info['size']    
-
-  # After the loop, create the final output file
-  if( seg_files_created > 0 ):
-    seg_files_created += 1 # Increment the seg files only if it has already been incremented
-  createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size, mp4exec, path_out_file, path_chapters_file, args.overwrite, seg_files_created )
-  
-  print("Videos combined sucessfully!")
+    # Now create the list of files to create
+    video_files = []
+    chapters = []
+    cumulative_dur = timedelta(seconds=0)
+    cumulative_size = 0
+    # Collect the file info data and chapter points for all files
+    for file_info in file_infos:
+      video_files.append(file_info['file'])
+      chapters.append({"name": Path(file_info['file']).stem, "timecode":formatTimedelta(cumulative_dur)})
+      cumulative_dur += file_info['dur'] # Count the cumulative duration
+      cumulative_size += file_info['size'] 
+     
+    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, max_out_size_kb )
+    
+    print(Colors.success("Script completed successfully, bye!"))
+  finally:
+    deinit() #Deinitialize the colorama library
 
 #
 # Creates a combined video file for a segment
-def createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size, mp4exec, path_out_file, path_chapters_file, args_overwrite, seg_files_created ):
+def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, max_out_size_kb=0 ):
 
-  # If we're creating segmentation files then this variable will contain the current number of the segment
-  # if we're only creating a single file then this value will be zero and only one output file will be generated ever
-  path_out_seg_file = path_out_file
-  if( seg_files_created > 0 ):
-    # Join the seg number with the file name
-    dirpath = os.path.dirname(str(path_out_file))
-    path_out_seg_file = Path(os.path.join(dirpath, "{0}_{1}{2}".format(path_out_file.stem, str(seg_files_created).zfill(3), path_out_file.suffix)))
-
-  # If the output files exist then either error or overwrite
-  if( path_out_seg_file.exists() ):
-    if( args_overwrite ):
-      os.remove(str(path_out_seg_file))
-    else:
-      print( "Output file '{0}' already exists. Use --overwrite switch to overwrite.".format(path_out_seg_file.name))
-      sys.exit(0)
-
-  print( "Output: {0}".format(str(path_out_seg_file)))
+  print( "Output: {0}".format(Colors.fileout(str(path_out_file))))
   
   # Add the final chapter as the end for this segment
   chapters.append({"name": "End", "timecode":formatTimedelta(cumulative_dur)})
@@ -149,16 +131,27 @@ def createCombinedVideoFile(seg_files, chapters, cumulative_dur, cumulative_size
   # Write the chapters file to out
   saveChaptersFile(chapters, path_chapters_file)
 
+  # Re-encode and combine the video files first
+  print(Colors.toolpath("Combining and re-encoding video files (ffmpeg)"))
+  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file)
+  
   # Now create the combined file and include the chapter marks
-  saveCombinedVideoFile(mp4exec, seg_files, path_out_seg_file, path_chapters_file)
+  print(Colors.toolpath("Adding chapters to combined video file (mp4box)"))
+  addChaptersToVideoFile(mp4exec, path_out_file, path_chapters_file)
 
   # Delete the chapters file
   os.remove(str(path_chapters_file))
 
+  # Now split the file if requested
+  if max_out_size_kb > 0:
+    print( Colors.toolpath("Splitting video file into requested max size of: {0}".format(humanize.naturalsize(max_out_size_kb * 1024))))
+    splitVideoFile(mp4exec, path_out_file, max_out_size_kb)
+
 #
 # Attempts to detect the requested size of the output file based on the input parameters
 # the absolute_size is overridden by disk_capacity if both are specified
-def determineMaximumOutputfileSize(absolute_size, disk_capacity):
+# Returns KB (kilobytes)
+def determineMaximumOutputfileSizeInKb(absolute_size, disk_capacity):
   if( disk_capacity and disk_capacity in DISKSIZES ):
     dsk_cap = DISKSIZES[disk_capacity]
     #print( "Disk Capacity: {0}".format(dsk_cap))
@@ -179,7 +172,7 @@ def determineMaximumOutputfileSize(absolute_size, disk_capacity):
     unit_multiplier = ABSSIZES[unit]
     total_size = size * unit_multiplier
     #print( "Absolute total: {0}, mult: {1} ".format(total_size, unit_multiplier))
-    return total_size
+    return total_size / 1024 # Return kilobytes
   else:
     # If nothing is specified then the default return is to use unbounded
     return -1
@@ -215,6 +208,10 @@ def findMp4Box(path_to_gpac_install=None):
   
   if( not path_to_gpac_install is None and os.path.isfile(os.path.join(path_to_gpac_install, "mp4box.exe")) ):
     return os.path.join(path_to_gpac_install, "mp4box.exe")
+
+  # Attempts to search for it under the bin folder
+  if( os.path.isfile("..\\bin\\GPAC\\mp4box.exe")):
+    return str(Path("..\\bin\\GPAC\\mp4box.exe").resolve())
   
   # Attempts to search for it under C:\Program Files\GPAC
   if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe")):
@@ -225,7 +222,20 @@ def findMp4Box(path_to_gpac_install=None):
     return "C:\\Program Files (x86)\\GPAC\\mp4box.exe"
   
   # Throw an error
-  raise ValueError('Could not locate GPAC install, please use the --gpac switch and ensure that the mp4box.exe file was installed.')
+  raise ValueError('Could not locate GPAC install, please use the --gpac switch to specify the path to the mp4box.exe file on your system.')
+
+#
+# Locates the ffmpeg executable and returns a full path to it
+def findffmpeg(path_to_ffmpeg_install=None):
+  if( not path_to_ffmpeg_install is None and os.path.isfile(os.path.join(path_to_ffmpeg_install, "ffmpeg.exe")) ):
+    return os.path.join(path_to_ffmpeg_install, "ffmpeg.exe")
+
+  # Attempts to search for it under the bin folder
+  if( os.path.isfile("..\\bin\\ff\\ffmpeg.exe")):
+    return str(Path("..\\bin\\ff\\ffmpeg.exe").resolve())
+  
+  # Throw an error
+  raise ValueError('Could not locate FFMPEG install, please use the --ffmpeg switch to specify the path to the ffmpeg.exe file on your system.')
 
 #
 # Returns an array of files matching the grep string passed in
@@ -268,28 +278,129 @@ def saveChaptersFile( chapters, path_chapters_file):
       chapter_idx += 1
 
 #
-# Calls mp4box to create the concatinated video file and includes the chapter file as well
-def saveCombinedVideoFile(mp4box_path, video_files, path_out_file, path_chapters_file):
+# Executes FFMPEG for all video files to be joined and reencodes
+def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file ):
+  # Construct the args to ffmpeg
+  # See https://stackoverflow.com/a/26366762/779521
+  prog_args = [ffmpeg_path]
 
-  # First delete the existing out video file
-  if os.path.exists(str(path_out_file)):
-    os.remove(str(path_out_file))
+  # How many video files
+  video_count = len(video_files)
+
+  # The filter complex configuration
+  filter_complex = []
+  curr_video = 0
+
+  # For every input construct their filter complex to be added later
+  for video_file in video_files:
+    prog_args.append("-i")
+    prog_args.append(str(Path(video_file)))
+
+    # Add video and audio indexes for the current video
+    filter_complex.append("[{0}:v:0]".format(curr_video))
+    filter_complex.append("[{0}:a:0]".format(curr_video))
+    curr_video += 1
+
+  # Add the final part of the complex
+  filter_complex.append("concat=n={0}:v=1:a=1".format(video_count))
+  filter_complex.append("[v]")
+  filter_complex.append("[a]")
+
+  # Join and add the filter complex to the args
+  prog_args.append("-filter_complex")
+  prog_args.append(" ".join(filter_complex))
+
+  # The mapping for the video and audio
+  prog_args.append("-map")
+  prog_args.append("[v]")
+  prog_args.append("-map")
+  prog_args.append("[a]")
+
+  # Don't show copyright header
+  prog_args.append("-hide_banner")
+  
+  # Don't show excess logging (only things that cause the exe to terminate)
+  prog_args.append("-loglevel")
+  prog_args.append("fatal") 
+  
+  # Force showing progress indicator text
+  prog_args.append("-stats") 
+
+  # Overwrite any prompts with YES
+  prog_args.append("-y") 
+  
+  # Finally the output file
+  prog_args.append(str(path_out_file))
+
+  # Disable colour output from FFMPEG before we start
+  os.environ['AV_LOG_FORCE_NOCOLOR'] = "1"
+
+  # Run ffmpeg and wait for the output file to be created before returning
+  return _runSubProcess(prog_args, path_to_wait_on=path_out_file)
+
+#
+# Calls mp4box to create the concatinated video file and includes the chapter file as well
+def addChaptersToVideoFile(mp4box_path, path_video_file, path_chapters_file):
+
+  # Check to see if the video file exists before doing anything
+  if not path_video_file.exists():
+    raise ValueError("Video file {0} could not be found. No chapters were added.".format(path_video_file))
 
   # Construct the args to mp4box
   prog_args = [mp4box_path]
-  for video_file in video_files:
-    prog_args.append("-cat")
-    prog_args.append(str(Path(video_file)))
-  
-  # Add the chapter file
-  prog_args.append("-chap")
-  prog_args.append(str(path_chapters_file))
 
-  # Add the output file at the very end
-  prog_args.append(str(path_out_file))
+  # Overwrite the default temporary folder to somewhere we
+  # know that the current user has write privileges
+  prog_args.append("-tmp")
+  prog_args.append("{0}".format(os.environ['TMP']))
+
+  # Add the chapter file
+  prog_args.append("-add")
+  prog_args.append(str(path_chapters_file)+":chap")
+
+  # Add the output file at the very end, we will add the
+  # chapter marks in-place
+  prog_args.append(str(path_video_file))
+
+  # Run the command
+  return _runSubProcess(prog_args)
+
+#
+# Splits an existing video file into requested chunks
+def splitVideoFile(mp4box_path, path_video_file, max_out_size_kb):
+  
+  # Can't split something that doesn't exist
+  if not path_video_file.exists():
+    raise ValueError("Video file {0} could not be found. Nothing was split.".format(path_video_file))
+
+  # Construct the args to mp4box
+  prog_args = [mp4box_path]
+
+  # Specify the maximum split size
+  prog_args.append("-splits")
+  prog_args.append(str(max_out_size_kb))
+
+  # Overwrite the default temporary folder to somewhere we
+  # know that the current user has write privileges
+  prog_args.append("-tmp")
+  prog_args.append("{0}".format(os.environ['TMP']))
+
+  # Add the input file we want to split
+  prog_args.append(str(path_video_file))
+
+  # Specify the same file again as an out parameter to use the same directory
+  prog_args.append("-out")
+  prog_args.append(str(path_video_file))
+
+  # Run the command
+  return _runSubProcess(prog_args)
+
+
+# Runs a subprocess using the arguments passed and monitors its progress while printing out the latest
+# log line to the console on a single line
+def _runSubProcess(prog_args, path_to_wait_on=None):
 
   # Run the app and collect the output
-  #ret = subprocess.run(prog_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
   ret = subprocess.Popen(prog_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
   longest_line = 0
@@ -298,7 +409,7 @@ def saveCombinedVideoFile(mp4box_path, video_files, path_out_file, path_chapters
       line = ret.stdout.readline()
       if not line:
         break
-      line = line.strip()[:65] # Limit the max length of the line, otherwise it will screw up our console window
+      line = line.strip()[:60] # Limit the max length of the line, otherwise it will screw up our console window
       longest_line = max( longest_line, len(line))
       sys.stdout.write('\r '+line.ljust(longest_line))
       sys.stdout.flush()
@@ -312,11 +423,23 @@ def saveCombinedVideoFile(mp4box_path, video_files, path_out_file, path_chapters
 
   # Move the input to the beginning of the line again
   # subsequent output text will look nicer :)
-  sys.stdout.write('\r')
+  #sys.stdout.write('\r')
+  sys.stdout.write('\r '+"Done!".ljust(longest_line))
+  print()
 
-  if( retcode != 0 ):
-    print()
-    print( "Error while concatinating file")
+  if( retcode != 0 ):  
+    print( "Error while executing {0}".format(prog_args[0]))
+    raise ValueError("Error {1} while executing {0}".format(prog_args[0], retcode))
+
+  # If we should wait on the creation of a particular file then do that now
+  total_wait_sec = 0
+  if not path_to_wait_on is None and not path_to_wait_on.is_dir():
+    while not path_to_wait_on.exists() or total_wait_sec < 5:
+      time.sleep(1)
+      total_wait_sec += 1
+
+    if not path_to_wait_on.exists() or not path_to_wait_on.is_file() :
+      raise ValueError("Expecting file {0} to be created but it wasn't, something went wrong!".format(str(path_to_wait_on)))
   return retcode
 
 
@@ -328,16 +451,16 @@ def parseArguments():
 
   parser.add_argument("-m","--match",   help="A grep style match that should be used to detect files to concatinate.",
                                         type=str)                                        
-
-#  parser.add_argument("-f","--files",   help="The list of files that should be concatinated",
-#                                        type=str, nargs="+")
   
   parser.add_argument('--disk',          help="When defined this defines the maximum file size to generate so that they will fit the required optical disk capacity. dvd4=4.7GB, dvd8=8.5GB, br25=25GB. If specified this overrides the -s/--size argument.",
                                         choices=['dvd4', 'dvd8', 'br25'])
 
   parser.add_argument("-s", "--size",   help="Defines the maximum size of a single combined output file. Supports format ending such as 'MB' for megabytes, 'GB' for gigabytes. If nothing is specified then 'MB' is assumed. Overridden by the --disk argument if both are specified. Supports only numbers using dot (.) as decimal separator, e.g. '15.5GB'", type=str)
 
-  parser.add_argument("--gpac",         help="Path to the GPAC install directory", 
+  parser.add_argument("--gpac",         help="Path to the GPAC install directory (not including the exe)", 
+                                        type=str)
+
+  parser.add_argument("--ffmpeg",         help="Path to the ffmpeg install directory (not including the exe)", 
                                         type=str)
 
   parser.add_argument("--overwrite",     help="Existing files with the same name as the output will be silently overwritten.", 
