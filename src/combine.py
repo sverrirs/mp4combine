@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "2.0.0"
+__version__ = "2.1.0"
+# When modifying remember to issue a new tag command in git before committing, then push the new tag
+#   git tag -a v2.1.0 -m "v2.1.0"
+#   git push origin --tags
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
 together and generates a chapter file that marks the beginning of each concatenated file in the final result.
@@ -21,6 +24,7 @@ Requires:
 See: https://github.com/sverrirs/mp4combine
 Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
 """
+
 from colorama import init, deinit # For colorized output to console windows (platform and shell independent)
 from constant import DISKSIZES, ABSSIZES, Colors # Constants for the script
 
@@ -53,11 +57,14 @@ def runMain():
     # Construct the argument parser for the commandline
     args = parseArguments()
 
+    # Get the current working directory (place that the script is executing from)
+    working_dir = sys.path[0]
+
     # Get the mp4box exec
-    mp4exec = findMp4Box(args.gpac)
+    mp4exec = findMp4Box(args.gpac, working_dir)
 
     # Get ffmpeg exec
-    ffmpegexec = findffmpeg(args.ffmpeg)
+    ffmpegexec = findffmpeg(args.ffmpeg, working_dir)
 
     # Detect the maximum file size that should be generated in kilobytes, if <=0 then unlimited
     max_out_size_kb = determineMaximumOutputfileSizeInKb(args.size, args.disk)
@@ -204,14 +211,15 @@ def parseMp4boxMediaInfo(file_name, mp4box_path, regex_mp4box_duration):
 
 #
 # Locates the mp4box executable and returns a full path to it
-def findMp4Box(path_to_gpac_install=None):
+def findMp4Box(path_to_gpac_install=None, working_dir=None):
   
   if( not path_to_gpac_install is None and os.path.isfile(os.path.join(path_to_gpac_install, "mp4box.exe")) ):
     return os.path.join(path_to_gpac_install, "mp4box.exe")
 
   # Attempts to search for it under the bin folder
-  if( os.path.isfile("..\\bin\\GPAC\\mp4box.exe")):
-    return str(Path("..\\bin\\GPAC\\mp4box.exe").resolve())
+  bin_dist = os.path.join(working_dir, "..\\bin\\GPAC\\mp4box.exe")
+  if( os.path.isfile(bin_dist)):
+    return str(Path(bin_dist).resolve())
   
   # Attempts to search for it under C:\Program Files\GPAC
   if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe")):
@@ -226,13 +234,14 @@ def findMp4Box(path_to_gpac_install=None):
 
 #
 # Locates the ffmpeg executable and returns a full path to it
-def findffmpeg(path_to_ffmpeg_install=None):
+def findffmpeg(path_to_ffmpeg_install=None, working_dir=None):
   if( not path_to_ffmpeg_install is None and os.path.isfile(os.path.join(path_to_ffmpeg_install, "ffmpeg.exe")) ):
     return os.path.join(path_to_ffmpeg_install, "ffmpeg.exe")
 
   # Attempts to search for it under the bin folder
-  if( os.path.isfile("..\\bin\\ff\\ffmpeg.exe")):
-    return str(Path("..\\bin\\ff\\ffmpeg.exe").resolve())
+  bin_dist = os.path.join(working_dir, "..\\bin\\ff\\ffmpeg.exe")
+  if( os.path.isfile(bin_dist)):
+    return str(Path(bin_dist).resolve())
   
   # Throw an error
   raise ValueError('Could not locate FFMPEG install, please use the --ffmpeg switch to specify the path to the ffmpeg.exe file on your system.')
