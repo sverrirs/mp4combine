@@ -117,7 +117,7 @@ def runMain():
       cumulative_dur += file_info['dur'] # Count the cumulative duration
       cumulative_size += file_info['size'] 
      
-    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, max_out_size_kb )
+    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, args.videosize, max_out_size_kb )
     
     print(Colors.success("Script completed successfully, bye!"))
   finally:
@@ -125,7 +125,7 @@ def runMain():
 
 #
 # Creates a combined video file for a segment
-def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, max_out_size_kb=0 ):
+def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, args_videomaxsize, max_out_size_kb=0 ):
 
   print( "Output: {0}".format(Colors.fileout(str(path_out_file))))
   
@@ -140,7 +140,7 @@ def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_si
 
   # Re-encode and combine the video files first
   print(Colors.toolpath("Combining and re-encoding video files (ffmpeg)"))
-  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file)
+  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize)
   
   # Now create the combined file and include the chapter marks
   print(Colors.toolpath("Adding chapters to combined video file (mp4box)"))
@@ -288,7 +288,7 @@ def saveChaptersFile( chapters, path_chapters_file):
 
 #
 # Executes FFMPEG for all video files to be joined and reencodes
-def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file ):
+def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize ):
   # Construct the args to ffmpeg
   # See https://stackoverflow.com/a/26366762/779521
   prog_args = [ffmpeg_path]
@@ -297,27 +297,40 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file ):
   video_count = len(video_files)
 
   # The filter complex configuration
-  filter_complex = []
+  filter_complex_concat = []
+  filter_complex_scale = []
   curr_video = 0
+   
+  # -filter_complex 
+  # "[0:v]scale=1024:576:force_original_aspect_ratio=1[v0]; 
+  # [1:v]scale=1024:576:force_original_aspect_ratio=1[v1]; 
+  # [v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]" 
 
   # For every input construct their filter complex to be added later
+  # Force scaling of videos first 
   for video_file in video_files:
     prog_args.append("-i")
-    prog_args.append(str(Path(video_file)))
+    prog_args.append(str(Path(video_file)))  # Don't surrount with quotes ""
 
-    # Add video and audio indexes for the current video
-    filter_complex.append("[{0}:v:0]".format(curr_video))
-    filter_complex.append("[{0}:a:0]".format(curr_video))
+    # Add the scaling instructions for the input video and give it a new output
+    # Force downscaling of aspect ratio and size to the minimal available
+    # the value of =1 is the same as ‘decrease’ => The output video dimensions will automatically be decreased if needed.
+    filter_complex_scale.append("[{0}:v]scale={1}:force_original_aspect_ratio=1[v{0}];".format(curr_video, args_videomaxsize))
+
+    # Add concat filter with the video output from the scaling and audio index from the original video
+    filter_complex_concat.append("[v{0}]".format(curr_video))
+    filter_complex_concat.append("[{0}:a]".format(curr_video))
     curr_video += 1
 
-  # Add the final part of the complex
-  filter_complex.append("concat=n={0}:v=1:a=1".format(video_count))
-  filter_complex.append("[v]")
-  filter_complex.append("[a]")
+  # Add the final part of the concat filter
+  filter_complex_concat.append("concat=n={0}:v=1:a=1".format(video_count))
+  filter_complex_concat.append("[v]")
+  filter_complex_concat.append("[a]")
 
   # Join and add the filter complex to the args
+  # First the scaling then the concats
   prog_args.append("-filter_complex")
-  prog_args.append(" ".join(filter_complex))
+  prog_args.append("".join(filter_complex_scale) + "".join(filter_complex_concat)) # Don't surrount with quotes ""
 
   # The mapping for the video and audio
   prog_args.append("-map")
@@ -325,21 +338,21 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file ):
   prog_args.append("-map")
   prog_args.append("[a]")
 
-  # Don't show copyright header
+   # Don't show copyright header
   prog_args.append("-hide_banner")
-  
+
   # Don't show excess logging (only things that cause the exe to terminate)
   prog_args.append("-loglevel")
-  prog_args.append("fatal") 
+  prog_args.append("verbose") 
   
   # Force showing progress indicator text
   prog_args.append("-stats") 
 
   # Overwrite any prompts with YES
-  prog_args.append("-y") 
-  
+  prog_args.append("-y")  
+
   # Finally the output file
-  prog_args.append(str(path_out_file))
+  prog_args.append(str(path_out_file))  # Don't surrount with quotes ""
 
   # Disable colour output from FFMPEG before we start
   os.environ['AV_LOG_FORCE_NOCOLOR'] = "1"
@@ -409,35 +422,51 @@ def splitVideoFile(mp4box_path, path_video_file, max_out_size_kb):
 # log line to the console on a single line
 def _runSubProcess(prog_args, path_to_wait_on=None):
 
+  # Force a UTF8 environment for the subprocess so that files with non-ascii characters are read correctly
+  # for this to work we must not use the universal line endings parameter
+  my_env = os.environ
+  my_env['PYTHONIOENCODING'] = 'utf-8'
+
+  retcode = None
+  
   # Run the app and collect the output
-  ret = subprocess.Popen(prog_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+  ret = subprocess.Popen(prog_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, env=my_env)
+  try:
+    longest_line = 0
+    trace_lines = []
+    while True:
+      try:
+        #line = ret.stdout.readline().decode('utf-8')
+        line = ret.stdout.readline()
+        if not line:
+          break
+        line = line.strip()[:80] # Limit the max length of the line, otherwise it will screw up our console window
+        trace_lines.append(line)
+        longest_line = max( longest_line, len(line))
+        sys.stdout.write('\r '+line.ljust(longest_line))
+        sys.stdout.flush()
+      except UnicodeDecodeError:
+        continue # Ignore all unicode errors, don't care!
 
-  longest_line = 0
-  while True:
-    try:
-      line = ret.stdout.readline()
-      if not line:
-        break
-      line = line.strip()[:60] # Limit the max length of the line, otherwise it will screw up our console window
-      longest_line = max( longest_line, len(line))
-      sys.stdout.write('\r '+line.ljust(longest_line))
-      sys.stdout.flush()
-    except UnicodeDecodeError:
-      continue # Ignore all unicode errors, don't care!
-
-  # Ensure that the return code was ok before continuing
-  retcode = ret.poll()
-  while retcode is None:
+    # Ensure that the return code was ok before continuing
     retcode = ret.poll()
+    while retcode is None:
+      retcode = ret.poll()
+  except KeyboardInterrupt:
+    ret.terminate()
+    raise
 
   # Move the input to the beginning of the line again
   # subsequent output text will look nicer :)
-  #sys.stdout.write('\r')
   sys.stdout.write('\r '+"Done!".ljust(longest_line))
   print()
 
-  if( retcode != 0 ):  
+  if( retcode != 0 ): 
     print( "Error while executing {0}".format(prog_args[0]))
+    print(" Full arguments:")
+    print( " ".join(prog_args))
+    print( "Full error")
+    print("\n".join(trace_lines))
     raise ValueError("Error {1} while executing {0}".format(prog_args[0], retcode))
 
   # If we should wait on the creation of a particular file then do that now
@@ -469,10 +498,14 @@ def parseArguments():
   parser.add_argument("--gpac",         help="Path to the GPAC install directory (not including the exe)", 
                                         type=str)
 
-  parser.add_argument("--ffmpeg",         help="Path to the ffmpeg install directory (not including the exe)", 
+  parser.add_argument("--ffmpeg",       help="Path to the ffmpeg install directory (not including the exe)", 
                                         type=str)
 
-  parser.add_argument("--overwrite",     help="Existing files with the same name as the output will be silently overwritten.", 
+  parser.add_argument("--videosize",    help="The desired maximum w/h size for the output video, default is 1024:576 (in case of multiple sizes for videos then all videos above this size are downsized to match) Aspect ratios will be downscaled as needed.", 
+                                        default="1024:576",
+                                        type=str)
+
+  parser.add_argument("--overwrite",    help="Existing files with the same name as the output will be silently overwritten.", 
                                         action="store_true")
 
   parser.add_argument("--shuffle",     help="Shuffles the list of episodes in a random fashion before combining. Useful to generate a random list of episodes to fill a DVD.", 
