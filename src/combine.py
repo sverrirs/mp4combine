@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 # When modifying remember to issue a new tag command in git before committing, then push the new tag
-#   git tag -a v2.1.0 -m "v2.1.0"
+#   git tag -a v2.2.0 -m "v2.2.0"
 #   git push origin --tags
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
@@ -20,6 +20,8 @@ Requires:
   pip install humanize
   pip install colorama
   pip install termcolor
+
+  pip install -r requirements.txt
 
 See: https://github.com/sverrirs/mp4combine
 Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
@@ -139,7 +141,7 @@ def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_si
   saveChaptersFile(chapters, path_chapters_file)
 
   # Re-encode and combine the video files first
-  print(Colors.toolpath("Combining and re-encoding video files (ffmpeg)"))
+  print(Colors.toolpath("Combining and re-encoding video files (ffmpeg), this will take a while..."))
   reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize)
   
   # Now create the combined file and include the chapter marks
@@ -149,9 +151,13 @@ def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_si
   # Delete the chapters file
   os.remove(str(path_chapters_file))
 
+  # Read the created file to learn its final filesize
+  size_out_file_kb = os.path.getsize(str(path_out_file)) / 1024
+  print( Colors.toolpath("Final size of video file is: {0}".format(humanize.naturalsize(size_out_file_kb * 1024))))
+
   # Now split the file if requested
-  if max_out_size_kb > 0:
-    print( Colors.toolpath("Splitting video file into requested max size of: {0}".format(humanize.naturalsize(max_out_size_kb * 1024))))
+  if max_out_size_kb > 0 and size_out_file_kb > max_out_size_kb :
+    print( Colors.toolpath("Size limit exceeded, splitting video into files of max size: {0}".format(humanize.naturalsize(max_out_size_kb * 1000))))
     splitVideoFile(mp4exec, path_out_file, max_out_size_kb)
 
 #
@@ -179,7 +185,7 @@ def determineMaximumOutputfileSizeInKb(absolute_size, disk_capacity):
     unit_multiplier = ABSSIZES[unit]
     total_size = size * unit_multiplier
     #print( "Absolute total: {0}, mult: {1} ".format(total_size, unit_multiplier))
-    return total_size / 1024 # Return kilobytes
+    return total_size / 1000 # Return kilobytes but in the metric system sense not the "1024 byte sense"
   else:
     # If nothing is specified then the default return is to use unbounded
     return -1
@@ -428,7 +434,7 @@ def _runSubProcess(prog_args, path_to_wait_on=None):
   my_env['PYTHONIOENCODING'] = 'utf-8'
 
   retcode = None
-  
+
   # Run the app and collect the output
   ret = subprocess.Popen(prog_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, env=my_env)
   try:

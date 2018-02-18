@@ -23,10 +23,10 @@ DISKSIZES['br25'] = BR_25GB
 
 ABSSIZES={}
 ABSSIZES['B'] = 1
-ABSSIZES['KB'] = ABSSIZES['B'] * 1024
-ABSSIZES['MB'] = ABSSIZES['KB'] * 1024
-ABSSIZES['GB'] = ABSSIZES['MB'] * 1024
-ABSSIZES['TB'] = ABSSIZES['GB'] * 1024
+ABSSIZES['KB'] = ABSSIZES['B'] * 1000
+ABSSIZES['MB'] = ABSSIZES['KB'] * 1000
+ABSSIZES['GB'] = ABSSIZES['MB'] * 1000
+ABSSIZES['TB'] = ABSSIZES['GB'] * 1000
 
 class Colors(object):
   # Lambdas as shorthands for printing various types of data
