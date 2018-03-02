@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 # When modifying remember to issue a new tag command in git before committing, then push the new tag
-#   git tag -a v2.2.0 -m "v2.2.0"
+#   git tag -a v2.3.0 -m "v2.3.0"
 #   git push origin --tags
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
