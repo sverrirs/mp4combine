@@ -18,11 +18,12 @@ Details and discussions can also be found on [my blog](https://blog.sverrirs.com
 
 Python 3.5+
 
+Before first use make sure you install all requirements using 
+
 ```
-pip install humanize
-pip install colorama
-pip install termcolor
+pip install -r requirements.txt
 ```
+
 
 ## Simple usage
 Assuming you have a bunch of videos named "clipXX.mp4" in a folder called _videos_ then this is how you feed all of them into script and have it automagically combine all the files and place nice chapter marks at the seams.
@@ -69,6 +70,17 @@ The `--size` argument supports multiple format endings such as 'MB' for megabyte
 
 > If you intend to play the files on your Xbox console then you need to limit the file size to be no more than `4GB`. This file limit is imposed by the FAT32 file system (see [Q12](http://support.xbox.com/en-US/xbox-360/console/audio-video-playback-faq#Q11)).
 
+## Handling input videos of different sizes
+If the input videos are not of the same width or height then the script will automatically attempt to scale all of the source material to `1024x576` resolution. This scaling size can be configured using the `--videosize` parameter.
+
+Below is a command that forces a `1280 x 720` HD resolution for all input files. Files with smaller resolution will be upscaled and those with larger resolutions will be downscaled.
+
+```
+python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --videosize "1280:720"
+```
+
+> Ensure you separate the dimensions with the colon character `:`
+
 ## Overwriting existing files
 If the output file exists the script will by default print an error and terminate without doing anything. To silently overwrite existing files with the same file name you can use the `--overwrite` switch
 
@@ -82,6 +94,28 @@ By default the files are concatinated in order by their filename. In case you wa
 ```
 python combine.py -m "D:\videos\*.mp4" -o "D:\toburn\Shuffle.mp4" --disk dvd4 --shuffle
 ```
+
+## Providing a cut point file as an input
+The script can cut beginning and endings of files automatically if a cut point file is provided using the `--cuts` or `-c` argument.
+
+The file format is simple comma separated file on the form
+```
+FILE_NAME_WITH_EXTENSION, START_TIME_CODE, END_TIME_CODE
+```
+
+Example cuts file (cutinfo.txt)
+```
+Barbie1.mp4, 00:33, 01:01
+Barbie2.mp4, 00:50, 1:45
+```
+
+Then to perform the cuts, run the following command
+
+```
+python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --cuts "D:\toburn\cutinfo.txt"
+```
+
+Will produce an output file (Barbie.mp4) of total 1:23 duration where the first 28 seconds are from Barbie1.mp4 and the remaining 55 seconds are from Barbie2.
 
 ## Contributing
 

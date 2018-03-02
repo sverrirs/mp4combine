@@ -40,6 +40,7 @@ import subprocess # To execute shell commands
 import re # To perform substring matching on the output of mp4box and other subprocesses
 from datetime import timedelta # To store the parsed duration of files and calculate the accumulated duration
 from random import shuffle # To be able to shuffle the list of files if the user requests it
+import csv # To use for the cutpoint files they are CSV files
 #
 # Provides natural string sorting (numbers inside strings are sorted in the correct order)
 # http://stackoverflow.com/a/3033342/779521
@@ -102,6 +103,13 @@ def runMain():
 
     print("Found {0} files".format(len(file_infos)))
 
+    # If the user supplied a cut point information file then we parse it now
+    cuts = None
+    if( args.cuts ):
+      cuts = parseCutPointInformation(Path(args.cuts))
+      if not cuts is None:
+        print("Read {0} cut point data from cut file".format(len(cuts)))
+
     # If the user wants the list of files shuffled then do that now in place
     if( args.shuffle ):
       shuffle(file_infos)
@@ -114,20 +122,53 @@ def runMain():
     cumulative_size = 0
     # Collect the file info data and chapter points for all files
     for file_info in file_infos:
+      file_name = Path(file_info['file']).name
       video_files.append(file_info['file'])
+      file_info_dur = file_info['dur']
+      
+      # Do we have a proposed cut duration, if so then we must use this info
+      # to correct the chapter locations
+      if file_name in cuts and 't' in cuts[file_name]:
+        file_info_dur = timedelta(seconds=cuts[file_name]['t'])
+
       chapters.append({"name": Path(file_info['file']).stem, "timecode":formatTimedelta(cumulative_dur)})
-      cumulative_dur += file_info['dur'] # Count the cumulative duration
+      cumulative_dur += file_info_dur # Count the cumulative duration
       cumulative_size += file_info['size'] 
      
-    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, args.videosize, max_out_size_kb )
+    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, cuts, args.videosize, max_out_size_kb )
     
     print(Colors.success("Script completed successfully, bye!"))
   finally:
     deinit() #Deinitialize the colorama library
 
+# Reads and parses cut information for the input files
+def parseCutPointInformation(path_to_cuts_file):
+  cuts = {}
+  with open(str(path_to_cuts_file)) as csvfile:
+    row_reader = csv.reader(csvfile)
+    for row in row_reader:
+      if( len(row) < 2 ):
+        continue
+      
+      filename = row[0].strip()
+      # Create a new entry for the file
+      cuts[filename] = {}
+      starttime = row[1].strip()
+      cuts[filename]['ss'] = starttime
+      startpoint = sum(x * int(t) for x, t in zip([1, 60, 3600], reversed(starttime.split(":"))))
+      if len(row) > 2:
+        timecode = row[2].strip()
+        fullduration = sum(x * int(t) for x, t in zip([1, 60, 3600], reversed(timecode.split(":"))))
+        cuts[filename]['t'] = fullduration - startpoint
+        
+  if len(cuts) <= 0:
+    return None
+  return cuts
+
+
 #
 # Creates a combined video file for a segment
-def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, args_videomaxsize, max_out_size_kb=0 ):
+def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, cuts, args_videomaxsize, max_out_size_kb=0 ):
 
   print( "Output: {0}".format(Colors.fileout(str(path_out_file))))
   
@@ -142,7 +183,7 @@ def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_si
 
   # Re-encode and combine the video files first
   print(Colors.toolpath("Combining and re-encoding video files (ffmpeg), this will take a while..."))
-  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize)
+  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize, cuts)
   
   # Now create the combined file and include the chapter marks
   print(Colors.toolpath("Adding chapters to combined video file (mp4box)"))
@@ -294,7 +335,7 @@ def saveChaptersFile( chapters, path_chapters_file):
 
 #
 # Executes FFMPEG for all video files to be joined and reencodes
-def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize ):
+def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize, cuts ):
   # Construct the args to ffmpeg
   # See https://stackoverflow.com/a/26366762/779521
   prog_args = [ffmpeg_path]
@@ -315,8 +356,22 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_v
   # For every input construct their filter complex to be added later
   # Force scaling of videos first 
   for video_file in video_files:
+
+    video_file_path = Path(video_file)
+
+    # Attempt to find a cut point for this video if there are cut points defined
+    #-ss 00:33 -t 30
+    if not cuts is None and video_file_path.name in cuts:
+      video_cut_info = cuts[video_file_path.name]
+      if 'ss' in video_cut_info:
+        prog_args.append("-ss")
+        prog_args.append(str(video_cut_info['ss']))
+      if 't' in video_cut_info:
+        prog_args.append("-t")
+        prog_args.append(str(video_cut_info['t']))
+
     prog_args.append("-i")
-    prog_args.append(str(Path(video_file)))  # Don't surrount with quotes ""
+    prog_args.append(str(video_file_path))  # Don't surrount with quotes ""
 
     # Add the scaling instructions for the input video and give it a new output
     # Force downscaling of aspect ratio and size to the minimal available
@@ -344,7 +399,7 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_v
   prog_args.append("-map")
   prog_args.append("[a]")
 
-   # Don't show copyright header
+  # Don't show copyright header
   prog_args.append("-hide_banner")
 
   # Don't show excess logging (only things that cause the exe to terminate)
@@ -427,6 +482,8 @@ def splitVideoFile(mp4box_path, path_video_file, max_out_size_kb):
 # Runs a subprocess using the arguments passed and monitors its progress while printing out the latest
 # log line to the console on a single line
 def _runSubProcess(prog_args, path_to_wait_on=None):
+
+  print( " ".join(prog_args))
 
   # Force a UTF8 environment for the subprocess so that files with non-ascii characters are read correctly
   # for this to work we must not use the universal line endings parameter
@@ -516,6 +573,9 @@ def parseArguments():
 
   parser.add_argument("--shuffle",     help="Shuffles the list of episodes in a random fashion before combining. Useful to generate a random list of episodes to fill a DVD.", 
                                         action="store_true")
+
+  parser.add_argument("-c","--cuts",   help="A CSV text file containing cut point information for the input files",
+                                        type=str)  
   
   parser.add_argument("-d", "--debug",  help="Prints out extra debugging information while script is running", 
                                         action="store_true")
