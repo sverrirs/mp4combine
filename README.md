@@ -117,6 +117,11 @@ python combine.py -m "D:\barbie\*.mp4" -o "D:\toburn\Barbie.mp4" --cuts "D:\tobu
 
 Will produce an output file (Barbie.mp4) of total 1:23 duration where the first 28 seconds are from Barbie1.mp4 and the remaining 55 seconds are from Barbie2.
 
+## Merging videos containing soft subtitles
+When merging videos containing subtitle tracks then the `--burnsubs` option can be specified so that the resulting combined file will have the default subtitle track embedded in the video. 
+
+> It is not currently possible to merge soft subtitles (subtitles on separate tracks).
+
 ## Contributing
 
 I welcome any and all suggestions and fixes either through the issue system above or through pull-requests.

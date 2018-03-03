@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 # When modifying remember to issue a new tag command in git before committing, then push the new tag
-#   git tag -a v2.3.0 -m "v2.3.0"
+#   git tag -a v2.4.0 -m "v2.4.0"
 #   git push origin --tags
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
@@ -60,6 +60,11 @@ def runMain():
     # Construct the argument parser for the commandline
     args = parseArguments()
 
+    # The burnsubs and cuts cannot be used together, they will produce incorrect subtitles to be burned into the video
+    if( not args.burnsubs is None and not args.cuts is None):
+      print(Colors.error("Options --burnsubs and --cuts cannot be used together as they would cause embedded subtitles to be incorrectly synced in the output video."))
+      sys.exit(100)
+
     # Get the current working directory (place that the script is executing from)
     working_dir = sys.path[0]
 
@@ -107,6 +112,7 @@ def runMain():
     cuts = None
     if( args.cuts ):
       cuts = parseCutPointInformation(Path(args.cuts))
+      print(cuts)
       if not cuts is None:
         print("Read {0} cut point data from cut file".format(len(cuts)))
 
@@ -128,14 +134,14 @@ def runMain():
       
       # Do we have a proposed cut duration, if so then we must use this info
       # to correct the chapter locations
-      if file_name in cuts and 't' in cuts[file_name]:
+      if not cuts is None and file_name in cuts and 't' in cuts[file_name]:
         file_info_dur = timedelta(seconds=cuts[file_name]['t'])
 
       chapters.append({"name": Path(file_info['file']).stem, "timecode":formatTimedelta(cumulative_dur)})
       cumulative_dur += file_info_dur # Count the cumulative duration
       cumulative_size += file_info['size'] 
      
-    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, cuts, args.videosize, max_out_size_kb )
+    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, cuts, args.videosize, args.burnsubs, max_out_size_kb )
     
     print(Colors.success("Script completed successfully, bye!"))
   finally:
@@ -144,7 +150,7 @@ def runMain():
 # Reads and parses cut information for the input files
 def parseCutPointInformation(path_to_cuts_file):
   cuts = {}
-  with open(str(path_to_cuts_file)) as csvfile:
+  with open(str(path_to_cuts_file), encoding='utf-8') as csvfile:
     row_reader = csv.reader(csvfile)
     for row in row_reader:
       if( len(row) < 2 ):
@@ -168,7 +174,7 @@ def parseCutPointInformation(path_to_cuts_file):
 
 #
 # Creates a combined video file for a segment
-def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, cuts, args_videomaxsize, max_out_size_kb=0 ):
+def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, cuts, args_videomaxsize, args_burnsubs, max_out_size_kb=0 ):
 
   print( "Output: {0}".format(Colors.fileout(str(path_out_file))))
   
@@ -183,7 +189,7 @@ def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_si
 
   # Re-encode and combine the video files first
   print(Colors.toolpath("Combining and re-encoding video files (ffmpeg), this will take a while..."))
-  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize, cuts)
+  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize, cuts, args_burnsubs)
   
   # Now create the combined file and include the chapter marks
   print(Colors.toolpath("Adding chapters to combined video file (mp4box)"))
@@ -335,7 +341,7 @@ def saveChaptersFile( chapters, path_chapters_file):
 
 #
 # Executes FFMPEG for all video files to be joined and reencodes
-def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize, cuts ):
+def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize, cuts, args_burnsubs ):
   # Construct the args to ffmpeg
   # See https://stackoverflow.com/a/26366762/779521
   prog_args = [ffmpeg_path]
@@ -376,7 +382,11 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_v
     # Add the scaling instructions for the input video and give it a new output
     # Force downscaling of aspect ratio and size to the minimal available
     # the value of =1 is the same as ‘decrease’ => The output video dimensions will automatically be decreased if needed.
-    filter_complex_scale.append("[{0}:v]scale={1}:force_original_aspect_ratio=1[v{0}];".format(curr_video, args_videomaxsize))
+    if args_burnsubs:
+      # More info on the subtitles filter http://ffmpeg.org/ffmpeg-filters.html#subtitles
+      filter_complex_scale.append("[{0}:v]scale={1}:force_original_aspect_ratio=1[vv{0}];[vv{0}]subtitles='{2}':force_style='FontName=Arial,Fontsize=24'[v{0}];".format(curr_video, args_videomaxsize, str(video_file_path).replace('\\', '/').replace(':', '\:'))) # Note the path must have forward slashes AND we must escape the colon!!
+    else:
+      filter_complex_scale.append("[{0}:v]scale={1}:force_original_aspect_ratio=1[v{0}];".format(curr_video, args_videomaxsize))
 
     # Add concat filter with the video output from the scaling and audio index from the original video
     filter_complex_concat.append("[v{0}]".format(curr_video))
@@ -503,8 +513,8 @@ def _runSubProcess(prog_args, path_to_wait_on=None):
         line = ret.stdout.readline()
         if not line:
           break
-        line = line.strip()[:80] # Limit the max length of the line, otherwise it will screw up our console window
         trace_lines.append(line)
+        line = line.strip()[:80] # Limit the max length of the line, otherwise it will screw up our console window
         longest_line = max( longest_line, len(line))
         sys.stdout.write('\r '+line.ljust(longest_line))
         sys.stdout.flush()
@@ -576,6 +586,9 @@ def parseArguments():
 
   parser.add_argument("-c","--cuts",   help="A CSV text file containing cut point information for the input files",
                                         type=str)  
+
+  parser.add_argument("--burnsubs",  help="Burns any subtitles found in the video files into the video itself (necessary to preserve separate subtitle tracks)", 
+                                     action="store_true")
   
   parser.add_argument("-d", "--debug",  help="Prints out extra debugging information while script is running", 
                                         action="store_true")

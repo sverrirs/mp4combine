@@ -32,7 +32,7 @@ class Colors(object):
   # Lambdas as shorthands for printing various types of data
   # See https://pypi.python.org/pypi/termcolor for more info
   filename = lambda x: colored(x, 'cyan')
-  #color_pid_title = lambda x: colored(x, 'red', 'on_cyan')
+  error = lambda x: colored(x, 'red')
   toolpath = lambda x: colored(x, 'yellow')
   #color_sid = lambda x: colored(x, 'yellow')
   #color_description = lambda x: colored(x, 'white')
