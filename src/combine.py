@@ -61,7 +61,7 @@ def runMain():
     args = parseArguments()
 
     # The burnsubs and cuts cannot be used together, they will produce incorrect subtitles to be burned into the video
-    if( not args.burnsubs is None and not args.cuts is None):
+    if( args.burnsubs == True and not args.cuts is None):
       print(Colors.error("Options --burnsubs and --cuts cannot be used together as they would cause embedded subtitles to be incorrectly synced in the output video."))
       sys.exit(100)
 
@@ -99,7 +99,9 @@ def runMain():
     # Only process files that have file-ending .mp4 and not files that have the same name as the joined one
     for in_file in in_files:
       print("File: {0}".format(Colors.filename(in_file)))
-      file_infos.append(parseMp4boxMediaInfo(in_file, mp4exec, regex_mp4box_duration))
+      m4b_fileinfo = parseMp4boxMediaInfo(in_file, mp4exec, regex_mp4box_duration)
+      if not m4b_fileinfo is None:
+        file_infos.append(m4b_fileinfo)
 
     # If nothing was found then don't continue, this can happen if no mp4 files are found or if only the joined file is found
     if( len(file_infos) <= 0 ):
@@ -247,10 +249,15 @@ def parseMp4boxMediaInfo(file_name, mp4box_path, regex_mp4box_duration):
   file_size = statinfo.st_size #Size in bytes of a plain file
 
   # Run the app and collect the output
-  ret = subprocess.run([mp4box_path, "-info", "-std", file_name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+  proc_cmd = [mp4box_path, "-info", "-std", file_name]
+  ret = subprocess.run(proc_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
   # Ensure that the return code was ok before continuing
-  ret.check_returncode()
+  if ret.returncode != 0:
+    print("Command {0} returned non-zero exit status {1}.".format(proc_cmd, ret.returncode))
+    print("File {0} will be skipped".format(file_name))
+    return None
+  #ret.check_returncode()
 
   # Computed Duration 00:23:06.040 - Indicated Duration 00:23:06.040
   match = regex_mp4box_duration.search( ret.stdout )
