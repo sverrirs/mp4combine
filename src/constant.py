@@ -15,11 +15,13 @@ from termcolor import colored # For shorthand color printing to the console, htt
 DVD_4GB = 4700000000 #DVD+R 4.7GB
 DVD_8GB = 8500000000 #DVD+R 8.5GB
 BR_25GB = 25000000000 #BluRay-R 25GB
+XBOX_4GB = 3900000000 #Maximum for Xbox 3.9GB
 
 DISKSIZES = {}
 DISKSIZES['dvd4'] = DVD_4GB
 DISKSIZES['dvd8'] = DVD_8GB
 DISKSIZES['br25'] = BR_25GB
+DISKSIZES['xbox'] = XBOX_4GB
 
 ABSSIZES={}
 ABSSIZES['B'] = 1

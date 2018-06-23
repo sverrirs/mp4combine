@@ -570,8 +570,8 @@ def parseArguments():
   parser.add_argument("-m","--match",   help="A grep style match that should be used to detect files to concatinate.",
                                         type=str)                                        
   
-  parser.add_argument('--disk',          help="When defined this defines the maximum file size to generate so that they will fit the required optical disk capacity. dvd4=4.7GB, dvd8=8.5GB, br25=25GB. If specified this overrides the -s/--size argument.",
-                                        choices=['dvd4', 'dvd8', 'br25'])
+  parser.add_argument('--disk',          help="When defined this defines the maximum file size to generate so that they will fit the required optical disk capacity. dvd4=4.7GB, dvd8=8.5GB, br25=25GB, xbox=4GB. If specified this overrides the -s/--size argument.",
+                                        choices=['dvd4', 'dvd8', 'br25', 'xbox'])
 
   parser.add_argument("-s", "--size",   help="Defines the maximum size of a single combined output file. Supports format ending such as 'MB' for megabytes, 'GB' for gigabytes. If nothing is specified then 'MB' is assumed. Overridden by the --disk argument if both are specified. Supports only numbers using dot (.) as decimal separator, e.g. '15.5GB'", type=str)
 
