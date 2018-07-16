@@ -14,6 +14,17 @@ Details and discussions can also be found on [my blog](https://blog.sverrirs.com
 
 :heart:
 
+- [Requires](#requires)
+- [Simple usage](#simple-usage)
+- [Advanced usage](#advanced-usage)
+  - [Handling input videos of different sizes](#handling-input-videos-of-different-sizes)
+  - [Overwriting existing files](#overwriting-existing-files)
+  - [Shuffling the list of files](#shuffling-the-list-of-files)
+  - [Providing a cut point file as an input](#providing-a-cut-point-file-as-an-input)
+  - [Merging videos containing soft subtitles](#merging-videos-containing-soft-subtitles)
+  - [Disabling audio in output video](#disabling-audio-in-output-video)
+- [Contributing](#contributing)
+
 ## Requires
 
 Python 3.5+
