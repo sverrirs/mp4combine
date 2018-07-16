@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # coding=utf-8
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 # When modifying remember to issue a new tag command in git before committing, then push the new tag
-#   git tag -a v2.4.0 -m "v2.4.0"
+#   git tag -a v2.5.0 -m "v2.5.0"
 #   git push origin --tags
 """
 Python script that generates the necessary mp4box -cat commands to concatinate multiple video files 
@@ -16,15 +16,11 @@ The script is written in Python 3.5
 Details about Xbox video formats:
 https://support.xbox.com/en-IE/xbox-360/console/audio-video-playback-faq
 
-Requires:
-  pip install humanize
-  pip install colorama
-  pip install termcolor
-
+Make sure you install the requirements for this script:
   pip install -r requirements.txt
 
 See: https://github.com/sverrirs/mp4combine
-Author: Sverrir Sigmundarson  info@sverrirs.com  https://www.sverrirs.com
+Author: Sverrir Sigmundarson  mp4combine@sverrirs.com  https://www.sverrirs.com
 """
 
 from colorama import init, deinit # For colorized output to console windows (platform and shell independent)
@@ -143,7 +139,7 @@ def runMain():
       cumulative_dur += file_info_dur # Count the cumulative duration
       cumulative_size += file_info['size'] 
      
-    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, cuts, args.videosize, args.burnsubs, max_out_size_kb )
+    createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args.overwrite, cuts, args.videosize, args.burnsubs, max_out_size_kb, args.noaudio )
     
     print(Colors.success("Script completed successfully, bye!"))
   finally:
@@ -176,7 +172,7 @@ def parseCutPointInformation(path_to_cuts_file):
 
 #
 # Creates a combined video file for a segment
-def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, cuts, args_videomaxsize, args_burnsubs, max_out_size_kb=0 ):
+def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_size, mp4exec, ffmpegexec, path_out_file, path_chapters_file, args_overwrite, cuts, args_videomaxsize, args_burnsubs, max_out_size_kb=0, args_noaudio=False ):
 
   print( "Output: {0}".format(Colors.fileout(str(path_out_file))))
   
@@ -191,7 +187,7 @@ def createCombinedVideoFile(video_files, chapters, cumulative_dur, cumulative_si
 
   # Re-encode and combine the video files first
   print(Colors.toolpath("Combining and re-encoding video files (ffmpeg), this will take a while..."))
-  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize, cuts, args_burnsubs)
+  reencodeAndCombineVideoFiles(ffmpegexec, video_files, path_out_file, args_videomaxsize, cuts, args_burnsubs, args_noaudio)
   
   # Now create the combined file and include the chapter marks
   print(Colors.toolpath("Adding chapters to combined video file (mp4box)"))
@@ -348,13 +344,16 @@ def saveChaptersFile( chapters, path_chapters_file):
 
 #
 # Executes FFMPEG for all video files to be joined and reencodes
-def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize, cuts, args_burnsubs ):
+def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_videomaxsize, cuts, args_burnsubs, args_noaudio ):
   # Construct the args to ffmpeg
   # See https://stackoverflow.com/a/26366762/779521
   prog_args = [ffmpeg_path]
 
   # How many video files
   video_count = len(video_files)
+
+  # Is sound enabled
+  audio_is_enabled = True if not args_noaudio is True else False
 
   # The filter complex configuration
   filter_complex_concat = []
@@ -397,13 +396,16 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_v
 
     # Add concat filter with the video output from the scaling and audio index from the original video
     filter_complex_concat.append("[v{0}]".format(curr_video))
-    filter_complex_concat.append("[{0}:a]".format(curr_video))
+    if audio_is_enabled:
+      filter_complex_concat.append("[{0}:a]".format(curr_video))
     curr_video += 1
 
   # Add the final part of the concat filter
-  filter_complex_concat.append("concat=n={0}:v=1:a=1".format(video_count))
+  audio_track = ':a=1' if audio_is_enabled else ''
+  filter_complex_concat.append("concat=n={0}:v=1{1}".format(video_count, audio_track))
   filter_complex_concat.append("[v]")
-  filter_complex_concat.append("[a]")
+  if audio_is_enabled:
+    filter_complex_concat.append("[a]")
 
   # Join and add the filter complex to the args
   # First the scaling then the concats
@@ -413,8 +415,9 @@ def reencodeAndCombineVideoFiles(ffmpeg_path, video_files, path_out_file, args_v
   # The mapping for the video and audio
   prog_args.append("-map")
   prog_args.append("[v]")
-  prog_args.append("-map")
-  prog_args.append("[a]")
+  if audio_is_enabled:
+    prog_args.append("-map")
+    prog_args.append("[a]")
 
   # Don't show copyright header
   prog_args.append("-hide_banner")
@@ -600,6 +603,8 @@ def parseArguments():
   parser.add_argument("-d", "--debug",  help="Prints out extra debugging information while script is running", 
                                         action="store_true")
 
+  parser.add_argument("--noaudio",  help="Explicitly disables audio tracks in the output video (useful for source videos that have no audio track)", 
+                                    action="store_true")
 
   return parser.parse_args()
 

@@ -91,3 +91,6 @@ ENV/
 #IntelliJ IDEA specific files
 /mp4box-catgen.iml
 /.idea/
+
+# VsCode ignore
+.vscode/
