@@ -122,6 +122,21 @@ When merging videos containing subtitle tracks then the `--burnsubs` option can 
 
 > It is not currently possible to merge soft subtitles (subtitles on separate tracks).
 
+## Disabling audio in output video
+By default the script will attempt to merge both video and audio tracks from the source videos. If one or more of the source videos have no audio tracks then the script will fail with an error similar to
+
+```
+Stream specifier ':a' in filtergraph description .... matches no streams.
+```
+
+You can use the `--noaudio` switch to force the script to skip all audio tracks from the source videos and only produce an output video of the merged video tracks.
+
+The below example will produce a completely silent video file
+
+```
+python combine.py --match "D:\barbie\*.mp4" -o "D:\toburn\Barbie_silent.mp4" --noaudio
+```
+
 ## Contributing
 
 I welcome any and all suggestions and fixes either through the issue system above or through pull-requests.
