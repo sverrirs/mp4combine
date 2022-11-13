@@ -37,7 +37,8 @@ import re # To perform substring matching on the output of mp4box and other subp
 from datetime import timedelta # To store the parsed duration of files and calculate the accumulated duration
 from random import shuffle # To be able to shuffle the list of files if the user requests it
 import csv # To use for the cutpoint files they are CSV files
-import platform
+import platform # identify which platform we're running on
+import tempfile # platform-independent tempoary files and directories
 
 # default filenames
 MP4BOX_DEFAULT_FILENAME = "mp4box" if not (platform.system() == "Windows") else "mp4box.exe"
@@ -462,7 +463,7 @@ def addChaptersToVideoFile(mp4box_path, path_video_file, path_chapters_file):
   # Overwrite the default temporary folder to somewhere we
   # know that the current user has write privileges
   prog_args.append("-tmp")
-  prog_args.append("{0}".format(os.environ['TMP']))
+  prog_args.append("{0}".format(tempfile.TemporaryDirectory()))
 
   # Add the chapter file
   prog_args.append("-add")
