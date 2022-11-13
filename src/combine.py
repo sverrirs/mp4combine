@@ -37,6 +37,12 @@ import re # To perform substring matching on the output of mp4box and other subp
 from datetime import timedelta # To store the parsed duration of files and calculate the accumulated duration
 from random import shuffle # To be able to shuffle the list of files if the user requests it
 import csv # To use for the cutpoint files they are CSV files
+import platform # identify which platform we're running on
+import tempfile # platform-independent tempoary files and directories
+
+# default filenames
+MP4BOX_DEFAULT_FILENAME = "mp4box" if not (platform.system() == "Windows") else "mp4box.exe"
+
 #
 # Provides natural string sorting (numbers inside strings are sorted in the correct order)
 # http://stackoverflow.com/a/3033342/779521
@@ -55,6 +61,8 @@ def runMain():
 
     # Construct the argument parser for the commandline
     args = parseArguments()
+    
+    print(args)
 
     # The burnsubs and cuts cannot be used together, they will produce incorrect subtitles to be burned into the video
     if( args.burnsubs == True and not args.cuts is None):
@@ -267,35 +275,35 @@ def parseMp4boxMediaInfo(file_name, mp4box_path, regex_mp4box_duration):
 
 #
 # Locates the mp4box executable and returns a full path to it
-def findMp4Box(path_to_gpac_install=None, working_dir=None):
+def findMp4Box(path_to_gpac_install=None, working_dir=None, mpbox_filename=MP4BOX_DEFAULT_FILENAME):
   
-  if( not path_to_gpac_install is None and os.path.isfile(os.path.join(path_to_gpac_install, "mp4box.exe")) ):
-    return os.path.join(path_to_gpac_install, "mp4box.exe")
+  if( not path_to_gpac_install is None and os.path.isfile(os.path.join(path_to_gpac_install, mpbox_filename)) ):
+    return os.path.join(path_to_gpac_install, mpbox_filename)
 
   # Attempts to search for it under the bin folder
-  bin_dist = os.path.join(working_dir, "..\\bin\\GPAC\\mp4box.exe")
+  bin_dist = os.path.join(working_dir, f"..\\bin\\GPAC\\{mpbox_filename}")
   if( os.path.isfile(bin_dist)):
     return str(Path(bin_dist).resolve())
   
   # Attempts to search for it under C:\Program Files\GPAC
-  if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe")):
-    return "C:\\Program Files\\GPAC\\mp4box.exe"
+  if( os.path.isfile(f"C:\\Program Files\\GPAC\\{mpbox_filename}")):
+    return f"C:\\Program Files\\GPAC\\{mpbox_filename}"
   
   # For 32 bit installs
-  if( os.path.isfile("C:\\Program Files\\GPAC\\mp4box.exe")):
-    return "C:\\Program Files (x86)\\GPAC\\mp4box.exe"
+  if( os.path.isfile(f"C:\\Program Files\\GPAC\\{mpbox_filename}")):
+    return f"C:\\Program Files (x86)\\GPAC\\{mpbox_filename}"
   
   # Throw an error
   raise ValueError('Could not locate GPAC install, please use the --gpac switch to specify the path to the mp4box.exe file on your system.')
 
 #
 # Locates the ffmpeg executable and returns a full path to it
-def findffmpeg(path_to_ffmpeg_install=None, working_dir=None):
-  if( not path_to_ffmpeg_install is None and os.path.isfile(os.path.join(path_to_ffmpeg_install, "ffmpeg.exe")) ):
-    return os.path.join(path_to_ffmpeg_install, "ffmpeg.exe")
+def findffmpeg(path_to_ffmpeg_install=None, working_dir=None, ffmpeg_filename="ffmpeg"):
+  if( not path_to_ffmpeg_install is None and os.path.isfile(os.path.join(path_to_ffmpeg_install, ffmpeg_filename)) ):
+    return os.path.join(path_to_ffmpeg_install, ffmpeg_filename)
 
   # Attempts to search for it under the bin folder
-  bin_dist = os.path.join(working_dir, "..\\bin\\ff\\ffmpeg.exe")
+  bin_dist = os.path.join(working_dir, f"..\\bin\\ff\\{ffmpeg_filename}")
   if( os.path.isfile(bin_dist)):
     return str(Path(bin_dist).resolve())
   
@@ -455,7 +463,7 @@ def addChaptersToVideoFile(mp4box_path, path_video_file, path_chapters_file):
   # Overwrite the default temporary folder to somewhere we
   # know that the current user has write privileges
   prog_args.append("-tmp")
-  prog_args.append("{0}".format(os.environ['TMP']))
+  prog_args.append("{0}".format(tempfile.TemporaryDirectory()))
 
   # Add the chapter file
   prog_args.append("-add")
@@ -611,4 +619,5 @@ def parseArguments():
 
 # If the script file is called by itself then execute the main function
 if __name__ == '__main__':
+  print("HELLO")
   runMain()
